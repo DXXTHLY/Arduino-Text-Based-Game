@@ -1,0 +1,283 @@
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+// Pin definitions
+const int buttonNorth = 8;  
+const int buttonSouth = 7;  
+const int buttonAction = 6; 
+const int potPin = A0;      
+const int redLED = 9;       
+const int greenLED = 10;    
+
+// Game state variables
+int playerLocation = 0; 
+int potValue;           
+int potUnlockValue = 512; 
+bool chestUnlocked = false;
+bool inBattle = false;
+bool treasureFound = false;
+bool canExplore = true;
+
+int playerHealth = 100;
+int enemyHealth = 100;
+
+void setup() {
+  pinMode(buttonNorth, INPUT_PULLUP);
+  pinMode(buttonSouth, INPUT_PULLUP);
+  pinMode(buttonAction, INPUT_PULLUP);
+  pinMode(redLED, OUTPUT);
+  pinMode(greenLED, OUTPUT);
+
+  lcd.begin(16, 2);
+  lcd.print("Press button to");
+  lcd.setCursor(0, 1);
+  lcd.print("start adventure");
+}
+
+void loop() {
+  if (digitalRead(buttonNorth) == LOW && canExplore) {
+    handleMoveNorth();
+    delay(300);
+  }
+  if (digitalRead(buttonSouth) == LOW && canExplore) {
+    handleMoveSouth();
+    delay(300);
+  }
+  if (digitalRead(buttonAction) == LOW) {
+    handleAction();
+    delay(300);
+  }
+}
+
+void handleMoveNorth() {
+  if (!inBattle) {
+    if (canExplore) {
+      playerLocation++;
+      lcd.clear();
+      lcd.print("Moved North");
+      delay(1000);
+      encounterRandomEvent();
+    } else {
+      lcd.clear();
+      lcd.print("Can't go north");
+    }
+  }
+}
+
+void handleMoveSouth() {
+  if (!inBattle) {
+    if (canExplore && playerLocation > 0) {
+      playerLocation--;
+      lcd.clear();
+      lcd.print("Moved South");
+      delay(1000);
+      encounterRandomEvent();
+    } else {
+      lcd.clear();
+      lcd.print("Can't go south");
+    }
+  }
+}
+
+void handleAction() {
+  if (treasureFound) {
+    if (!chestUnlocked) {
+      handleUnlockChest();
+    } else {
+      lcd.clear();
+      lcd.print("Treasure found!");
+      giveRandomItem();
+      treasureFound = false;
+    }
+  } else if (inBattle) {
+    handleFightOrRun();
+  }
+}
+
+void encounterRandomEvent() {
+  int eventChance = random(0, 100);
+  if (eventChance < 10) {  
+    encounterEnemy();
+  } else if (eventChance < 20) {
+    findTreasure();
+  } else {
+    lcd.clear();
+    lcd.print("Nothing here.");
+    canExplore = true;
+  }
+}
+
+void encounterEnemy() {
+  inBattle = true;
+  lcd.clear();
+  lcd.print("Enemy ahead!");
+  flashRedLED();
+  delay(1000);
+  handleFightOrRun();
+}
+
+void handleFightOrRun() {
+  lcd.clear();
+  lcd.print("INVENTORY");
+  lcd.setCursor(0, 1);
+  lcd.print("FIGHT OR RUN?");
+  
+  // Disable movement during battle
+  canExplore = false;
+  
+  while (true) {
+    if (digitalRead(buttonSouth) == LOW) {  // Left (pin 7) for Fight
+      handleFight();
+      break;
+    }
+    if (digitalRead(buttonAction) == LOW) {  // Right (pin 6) for Run
+      handleRun();
+      break;
+    }
+    if (digitalRead(buttonNorth) == LOW) {  // Forward (pin 8) for Inventory
+      openInventory();
+      break;
+    }
+  }
+}
+
+void handleFight() {
+  lcd.clear();
+  lcd.print("Attacking enemy!");
+  delay(1000);
+  int damage = random(5, 20);  // Random damage to enemy
+  enemyHealth -= damage;
+  lcd.clear();
+  lcd.print("Enemy HP: " + String(enemyHealth));
+  lcd.setCursor(0, 1);
+  lcd.print("Your HP: " + String(playerHealth));
+
+  if (enemyHealth <= 0) {
+    lcd.clear();
+    lcd.print("Enemy defeated");
+    resetBattleState();
+  } else {
+    handleEnemyAttack();  // Enemy attacks player after your attack
+  }
+
+  delay(1000);
+}
+
+void handleRun() {
+  lcd.clear();
+  lcd.print("You ran away!");
+  resetBattleState();
+  delay(1000);
+}
+
+void handleEnemyAttack() {
+  int enemyDamage = random(5, 20);  // Random damage to player
+  playerHealth -= enemyDamage;
+  lcd.clear();
+  lcd.print("Enemy attacks!");
+  delay(1000);
+  lcd.clear();
+  lcd.print("Your HP: " + String(playerHealth));
+
+  if (playerHealth <= 0) {
+    lcd.clear();
+    lcd.print("You died!");
+    resetGame();  // Restart the game if player dies
+  }
+  delay(1000);
+}
+
+void resetBattleState() {
+  inBattle = false;
+  enemyHealth = 100;  // Reset enemy health after battle
+  canExplore = true;  // Allow exploration again
+}
+
+void resetGame() {
+  playerHealth = 100;
+  enemyHealth = 100;
+  playerLocation = 0;
+  lcd.clear();
+  lcd.print("Game restarted!");
+  delay(2000);
+  canExplore = true;  // Re-enable exploration after restart
+}
+
+void flashRedLED() {
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(redLED, HIGH);
+    delay(300);
+    digitalWrite(redLED, LOW);
+    delay(300);
+  }
+}
+
+void handleUnlockChest() {
+  potValue = analogRead(potPin);
+  if (potValue > 300 && potValue < 700) {
+    digitalWrite(greenLED, HIGH);
+    lcd.clear();
+    lcd.print("*click*");
+    delay(1000);
+    digitalWrite(greenLED, LOW);
+    chestUnlocked = true;
+  } else {
+    lcd.clear();
+    lcd.print("Turn lock...");
+  }
+}
+
+void giveRandomItem() {
+  int itemChance = random(0, 100);
+  String item;
+
+  if (itemChance < 5) {
+    item = "Ray Gun";
+  } else if (itemChance < 10) {
+    item = "Unlock Key";
+  } else if (itemChance < 20) {
+    item = "Gun";
+  } else if (itemChance < 40) {
+    item = "Sword";
+  } else {
+    item = "Knife";
+  }
+  
+  lcd.clear();
+  lcd.print("Item: " + item);
+  delay(2000);
+}
+
+void findTreasure() {
+  lcd.clear();
+  lcd.print("Found treasure!");
+  treasureFound = true;
+}
+
+void openInventory() {
+  lcd.clear();
+  lcd.print("Inventory opened");
+  
+  // 10-second timeout for the inventory
+  for (int i = 0; i < 10; i++) {
+    digitalWrite(redLED, HIGH);
+    delay(500);  // Blink the red LED on
+    digitalWrite(redLED, LOW);
+    delay(500);  // Blink the red LED off
+
+    if (digitalRead(buttonNorth) == LOW || digitalRead(buttonSouth) == LOW || digitalRead(buttonAction) == LOW) {
+      break;  // Exit early if any button is pressed
+    }
+  }
+  
+  lcd.clear();
+  lcd.print("NO ITEMS");  // If no items, display "NO ITEMS"
+  delay(1000);
+  
+  // Return to the previous screen
+  lcd.clear();
+  lcd.print("INVENTORY");
+  lcd.setCursor(0, 1);
+  lcd.print("FIGHT OR RUN?");
+}
